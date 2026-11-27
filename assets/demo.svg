@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="330" viewBox="0 0 820 330" role="img" aria-label="tidydl dry-run apply undo preview">
+  <rect width="820" height="330" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <rect width="820" height="36" rx="12" fill="#161b22"/>
+  <rect y="24" width="820" height="12" fill="#161b22"/>
+  <circle cx="20" cy="18" r="6" fill="#ff5f56"/>
+  <circle cx="40" cy="18" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="18" r="6" fill="#27c93f"/>
+  <text x="410" y="23" text-anchor="middle" fill="#8b949e" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12">tidydl — dry-run · --apply · --undo</text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Microsoft YaHei',sans-serif" font-size="13.5">
+    <text x="24" y="64" fill="#8b949e">$ <tspan fill="#e6edf3">tidydl ~/Downloads</tspan></text>
+    <text x="24" y="90" fill="#58a6ff" font-weight="bold">tidydl · ~/Downloads</text>
+    <text x="24" y="114" fill="#e6edf3">  14 个文件待整理:</text>
+    <text x="24" y="138" fill="#79c0ff">    压缩包 Archives     <tspan fill="#e6edf3">3 个    2.9 GiB</tspan>    <tspan fill="#79c0ff">安装包 Installers  </tspan><tspan fill="#e6edf3">2 个  170.7 MiB</tspan></text>
+    <text x="24" y="162" fill="#79c0ff">    文档 Documents      <tspan fill="#e6edf3">3 个  886.7 KiB</tspan>    <tspan fill="#79c0ff">图片 Images        </tspan><tspan fill="#e6edf3">2 个    4.8 MiB</tspan></text>
+    <text x="24" y="186" fill="#8b949e">    会议纪要_项目评审.docx → Documents/会议纪要_项目评审.docx</text>
+    <text x="24" y="210" fill="#d29922">  跳过 2 个 (下载中 1 / 最近修改 1) · 默认预演，加 --apply 执行</text>
+    <text x="24" y="244" fill="#8b949e">$ <tspan fill="#e6edf3">tidydl ~/Downloads --apply</tspan></text>
+    <text x="24" y="268" fill="#3fb950">  已整理 14 个文件; 撤销日志: tidydl-undo-20261127-113002.json</text>
+    <text x="24" y="298" fill="#8b949e">$ <tspan fill="#e6edf3">tidydl ~/Downloads --undo</tspan>  <tspan fill="#3fb950">→ 已撤销 14 个文件</tspan></text>
+  </g>
+</svg>

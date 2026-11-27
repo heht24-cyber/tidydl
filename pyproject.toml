@@ -23,6 +23,11 @@ classifiers = [
     "Topic :: Utilities",
 ]
 
+[project.urls]
+Homepage = "https://github.com/heht24-cyber/tidydl"
+Repository = "https://github.com/heht24-cyber/tidydl"
+Issues = "https://github.com/heht24-cyber/tidydl/issues"
+
 [project.scripts]
 tidydl = "tidydl.cli:main"
 

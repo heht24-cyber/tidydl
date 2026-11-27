@@ -1,10 +1,12 @@
 # tidydl
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](pyproject.toml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](pyproject.toml)
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0_(stdlib_only)-2da44e.svg)](pyproject.toml)
 
 > **下载文件夹一键收拾:零配置分类整理,默认预演,全程可撤销。**
+
+![tidydl 终端预览](assets/demo.svg)
 
 *One command to tidy your Downloads folder — zero-config rules, dry-run by default, fully undoable.* 零第三方依赖,Windows / Linux / macOS 通用。
 
