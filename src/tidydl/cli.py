@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     root = Path(args.path).expanduser() if args.path else Path.home() / "Downloads"
-    if not root.is_dir():
+    if not args.undo and not root.is_dir():
         sys.stderr.write(f"目录不存在:{root}\n")
         return 2
 
@@ -95,7 +95,11 @@ def main(argv: list[str] | None = None) -> int:
         print("\n  预演模式:确认无误后加 --apply 执行;执行后 --undo 可一键撤销。")
         return 0
 
-    log = apply_plan(report)
+    try:
+        log = apply_plan(report)
+    except OSError as exc:
+        sys.stderr.write(f"整理中断:{exc}\n")
+        return 1
     print(f"\n  已整理 {len(report.moves)} 个文件;撤销日志:{log.name}")
     return 0
 
