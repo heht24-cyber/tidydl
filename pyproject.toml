@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tidydl"
+version = "0.1.0"
+description = "One command to tidy your Downloads folder: zero-config rules, dry-run by default, fully undoable."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "hht233" }]
+keywords = ["downloads", "organizer", "tidy", "cli", "file-management", "cleanup"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Chinese (Simplified)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Desktop Environment :: File Managers",
+    "Topic :: Utilities",
+]
+
+[project.scripts]
+tidydl = "tidydl.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
