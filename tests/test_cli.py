@@ -1,11 +1,13 @@
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -23,7 +25,6 @@ class Base(unittest.TestCase):
         p = self.td / name
         p.write_text("内容", encoding="utf-8")
         old = time.time() - age_minutes * 60
-        import os
         os.utime(p, (old, old))
         return p
 
@@ -63,6 +64,19 @@ class TestCli(Base):
     def test_undo_without_log(self):
         code, out = self.run_main([str(self.td), "--undo"])
         self.assertEqual(code, 2)
+
+    def test_explicit_log_after_relative_apply_from_different_directory(self):
+        self.touch("notes.txt")
+        self.addCleanup(os.chdir, Path.cwd())
+        os.chdir(self.td.parent)
+        self.assertEqual(self.run_main([self.td.name, "--apply"])[0], 0)
+        log, = self.td.glob("tidydl-undo-*.json")
+        os.chdir(self.td)
+        with patch.object(Path, "home", return_value=self.td / "no-home"):
+            code, out = self.run_main(["--undo", str(log)])
+        self.assertEqual(code, 0)
+        self.assertIn("已撤销 1 个文件", out)
+        self.assertEqual((self.td / "notes.txt").read_text(encoding="utf-8"), "内容")
 
     def test_nothing_to_do(self):
         code, out = self.run_main([str(self.td)])

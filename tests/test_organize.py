@@ -1,9 +1,11 @@
+import json
 import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -116,6 +118,39 @@ class TestApplyUndo(Base):
         report = self._plan_with(["a.jpg"])
         apply_plan(report)
         self.assertIsNotNone(find_latest_undo_log(self.td))
+
+    def test_same_second_batches_keep_independent_logs(self):
+        with patch("tidydl.organize.time.strftime", return_value="20261127-120000"):
+            first = apply_plan(self._plan_with(["first.txt"]))
+            old_contents = first.read_bytes()
+            second = apply_plan(self._plan_with(["second.txt"]))
+        self.assertNotEqual(first, second)
+        self.assertEqual(first.read_bytes(), old_contents)
+        self.assertEqual(find_latest_undo_log(self.td), second)
+        self.assertEqual(undo(second), 1)
+        self.assertTrue((self.td / "Documents" / "first.txt").is_file())
+        self.assertEqual(undo(first), 1)
+
+    def test_partial_batch_can_be_undone(self):
+        report = self._plan_with(["a.jpg", "b.jpg"])
+        (self.td / "b.jpg").unlink()
+        with self.assertRaises(FileNotFoundError):
+            apply_plan(report)
+        log = find_latest_undo_log(self.td)
+        self.assertIsNotNone(log)
+        self.assertEqual(undo(log), 1)
+        self.assertTrue((self.td / "a.jpg").is_file())
+
+    def test_legacy_relative_log_from_another_working_directory(self):
+        images = self.td / "Images"
+        images.mkdir()
+        (images / "a.jpg").write_bytes(b"photo")
+        log = self.td / "tidydl-undo-20260101-120000.json"
+        log.write_text(json.dumps({"version": 1, "root": "Downloads", "moves": [
+            ["Downloads/a.jpg", "Downloads/Images/a.jpg"]
+        ]}), encoding="utf-8")
+        self.assertEqual(undo(log), 1)
+        self.assertEqual((self.td / "a.jpg").read_bytes(), b"photo")
 
 
 if __name__ == "__main__":
