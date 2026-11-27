@@ -1,5 +1,9 @@
 # tidydl
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](pyproject.toml)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0_(stdlib_only)-2da44e.svg)](pyproject.toml)
+
 > **下载文件夹一键收拾:零配置分类整理,默认预演,全程可撤销。**
 
 *One command to tidy your Downloads folder — zero-config rules, dry-run by default, fully undoable.* 零第三方依赖,Windows / Linux / macOS 通用。
@@ -20,10 +24,18 @@ tidydl 的立场:**按需一条命令、零配置、默认只预演、错了随�
 
 ## 快速开始
 
+一行命令直接安装或试用（零第三方依赖）：
+
 ```console
-$ git clone https://github.com/heht24-cyber/tidydl
-$ cd tidydl
-$ pip install -e .
+# 推荐: pipx 隔离安装
+$ pipx install git+https://github.com/heht24-cyber/tidydl.git
+
+# 或通过 uvx 免安装直接预演
+$ uvx --from git+https://github.com/heht24-cyber/tidydl.git tidydl
+
+# 或直接使用 pip 安装
+$ pip install git+https://github.com/heht24-cyber/tidydl.git
+
 $ tidydl
 ```
 
