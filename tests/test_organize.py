@@ -1,6 +1,8 @@
 import json
 import os
 import sys
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import time
 import unittest
@@ -10,7 +12,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from tidydl.organize import apply_plan, find_latest_undo_log, scan, undo
+from tidydl.organize import apply_plan, find_latest_undo_log, scan, undo, undo_latest
 
 
 class Base(unittest.TestCase):
@@ -140,6 +142,66 @@ class TestApplyUndo(Base):
         self.assertIsNotNone(log)
         self.assertEqual(undo(log), 1)
         self.assertTrue((self.td / "a.jpg").is_file())
+
+    def test_replaying_old_log_does_not_restore_new_file_at_same_path(self):
+        self.touch("report.txt", content="old")
+        first = apply_plan(scan(self.td))
+        self.assertEqual(undo(first), 1)
+        (self.td / "report.txt").rename(self.td / ".old")
+        self.touch("report.txt", content="new")
+        second = apply_plan(scan(self.td))
+        self.assertEqual(undo(first), 0)
+        self.assertEqual((self.td / "Documents/report.txt").read_text(), "new")
+        self.assertEqual(undo(second), 1)
+
+    def test_failed_undo_resumes_without_replaying_completed_row(self):
+        log = apply_plan(self._plan_with(["a.txt", "b.txt"]))
+        import shutil
+        move = shutil.move
+
+        def fail_second(src, dest):
+            if Path(src).name == "a.txt":
+                raise PermissionError("busy")
+            return move(src, dest)
+
+        with patch("tidydl.organize.shutil.move", side_effect=fail_second):
+            with self.assertRaises(PermissionError):
+                undo(log)
+        # The second invocation must preserve the replacement at b's location.
+        (self.td / "Documents/b.txt").write_text("new")
+        self.assertEqual(undo(log), 1)
+        self.assertEqual((self.td / "Documents/b.txt").read_text(), "new")
+        self.assertEqual(undo(log), 0)
+
+    def test_interrupted_undo_recovers_before_reapplying_same_file(self):
+        log = apply_plan(self._plan_with(["a.txt", "b.txt"]))
+        script = (
+            "import os, sys, shutil\n"
+            "from pathlib import Path\n"
+            "from unittest.mock import patch\n"
+            "from tidydl.organize import undo\n"
+            "move = shutil.move\n"
+            "def stop_after_move(src, dst):\n"
+            "    move(src, dst)\n"
+            "    os._exit(37)\n"
+            "with patch('tidydl.organize.shutil.move', stop_after_move):\n"
+            "    undo(Path(sys.argv[1]))\n"
+        )
+        process = subprocess.run([sys.executable, "-c", script, str(log)],
+                                 env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+        self.assertEqual(process.returncode, 37)
+        second = apply_plan(scan(self.td))
+        self.assertEqual(undo(log), 1)
+        self.assertTrue((self.td / "Documents/b.txt").is_file())
+        self.assertEqual(undo(second), 1)
+
+    def test_concurrent_default_undos_claim_separate_batches(self):
+        first = apply_plan(self._plan_with(["first.txt"]))
+        second = apply_plan(self._plan_with(["second.txt"]))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(undo_latest, [self.td, self.td]))
+        self.assertCountEqual(results, [(first, 1), (second, 1)])
+        self.assertIsNone(undo_latest(self.td))
 
     def test_legacy_relative_log_from_another_working_directory(self):
         images = self.td / "Images"

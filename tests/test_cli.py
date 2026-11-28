@@ -61,6 +61,17 @@ class TestCli(Base):
         self.assertIn("已撤销 1 个文件", out)
         self.assertTrue((self.td / "photo.jpg").exists())
 
+    def test_consecutive_default_undos_walk_back_through_batches(self):
+        for name in ("first.txt", "second.txt"):
+            self.touch(name)
+            self.assertEqual(self.run_main([str(self.td), "--apply"])[0], 0)
+        for name in ("second.txt", "first.txt"):
+            code, output = self.run_main([str(self.td), "--undo"])
+            self.assertEqual(code, 0)
+            self.assertIn("已撤销 1 个文件", output)
+            self.assertTrue((self.td / name).is_file())
+        self.assertEqual(self.run_main([str(self.td), "--undo"])[0], 2)
+
     def test_undo_without_log(self):
         code, out = self.run_main([str(self.td), "--undo"])
         self.assertEqual(code, 2)

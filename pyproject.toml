@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tidydl"
-version = "0.1.0"
+version = "0.1.1"
 description = "One command to tidy your Downloads folder: zero-config rules, dry-run by default, fully undoable."
 readme = "README.md"
 requires-python = ">=3.10"
