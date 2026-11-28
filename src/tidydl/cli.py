@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
 from . import __version__
-from .organize import apply_plan, find_latest_undo_log, fmt_bytes, scan, undo
+from .organize import apply_plan, fmt_bytes, scan, undo, undo_latest
 from .rules import CATEGORIES, CN_NAMES, load_rules
 
 
@@ -26,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path", nargs="?", help="要整理的目录(默认:~/Downloads)")
     p.add_argument("--apply", action="store_true", help="真正执行(默认只预演)")
     p.add_argument("--undo", nargs="?", const="", default=None, metavar="LOG",
-                   help="撤销:不带参数=撤销目标目录最近一次;也可指定日志文件")
+                   help="撤销:不带参数=撤销目标目录最近一个仍可还原的批次;也可指定日志文件")
     p.add_argument("--rules", metavar="FILE", help="自定义规则 JSON(与内置合并)")
     p.add_argument("--min-age", type=float, default=10, metavar="MIN",
                    help="最近 MIN 分钟内修改的文件跳过(默认 10;0=不跳过)")
@@ -54,12 +55,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.undo is not None:
-        log = Path(args.undo).expanduser() if args.undo else find_latest_undo_log(root)
-        if log is None or not Path(log).is_file():
-            sys.stderr.write(f"找不到撤销日志:{log}\n")
+        try:
+            if args.undo:
+                log = Path(args.undo).expanduser()
+                n = undo(log)
+            else:
+                result = undo_latest(root)
+                if result is None:
+                    sys.stderr.write("没有可撤销的整理批次。\n")
+                    return 2
+                log, n = result
+        except (ValueError, OSError, sqlite3.Error) as exc:
+            sys.stderr.write(f"撤销失败:{exc}\n")
             return 2
-        n = undo(Path(log))
-        print(f"已撤销 {n} 个文件(依据 {Path(log).name})")
+        print(f"已撤销 {n} 个文件(依据 {log.name})")
         return 0
 
     rules = None
@@ -97,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         log = apply_plan(report)
-    except OSError as exc:
+    except (OSError, ValueError, sqlite3.Error) as exc:
         sys.stderr.write(f"整理中断:{exc}\n")
         return 1
     print(f"\n  已整理 {len(report.moves)} 个文件;撤销日志:{log.name}")

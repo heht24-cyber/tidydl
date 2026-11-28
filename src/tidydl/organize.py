@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+import stat
 import shutil
 import time
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
@@ -100,7 +103,74 @@ def _reserve_undo_log(root: Path) -> tuple[Path, Path]:
         pending.unlink()
 
 
+def _write_json(path: Path, data: dict) -> None:
+    # The directory lock gives this temporary file a single writer.
+    temporary = path.with_name("." + path.name + ".tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
+
+
+def _read_log(log: Path) -> dict:
+    data = json.loads(log.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("version") != UNDO_LOG_VERSION:
+        raise ValueError(f"不支持的撤销日志: {log.name}")
+    moves = data.get("moves")
+    if not isinstance(moves, list) or any(
+        not isinstance(pair, list) or len(pair) != 2 or
+        not all(isinstance(value, str) for value in pair) for pair in moves
+    ):
+        raise ValueError(f"撤销日志中的移动记录无效: {log.name}")
+    return data
+
+
+def _original_path(log: Path, data: dict, value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    # Older logs stored paths prefixed by the relative scan directory.
+    return log.parent / path.relative_to(data["root"])
+
+
+def _recover_undo(cursor: Path) -> None:
+    if not cursor.exists():
+        return
+    intent = json.loads(cursor.read_text(encoding="utf-8"))
+    log = cursor.parent / intent["log"]
+    data = _read_log(log)
+    left = intent["left"]
+    if len(data["moves"]) >= left:
+        dest = _original_path(log, data, data["moves"][left - 1][1])
+        # A completed rename removes dest. If an unrelated file has since
+        # occupied dest, comparing its identity also prevents replay.
+        try:
+            info = dest.lstat()
+            same = [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns] == intent["file"]
+        except FileNotFoundError:
+            same = False
+        if not same:
+            left -= 1
+        data["moves"] = data["moves"][:left]
+        _write_json(log, data)
+    cursor.unlink()
+
+
+@contextmanager
+def _directory_lock(directory: Path):
+    # SQLite supplies a process lock on Windows, macOS and Linux. The OS
+    # releases it when a process exits, even if its undo was interrupted.
+    with closing(sqlite3.connect(directory / ".tidydl.lock", timeout=30)) as lock:
+        lock.execute("BEGIN IMMEDIATE")
+        cursor = directory / ".tidydl-undo-progress.json"
+        _recover_undo(cursor)
+        yield cursor
+
+
 def apply_plan(report: Report) -> Path:
+    with _directory_lock(report.root):
+        return _apply_plan(report)
+
+
+def _apply_plan(report: Report) -> Path:
     """执行计划并记录成功的移动。中途遇到错误时,已移动的文件仍可撤销。"""
     log_path, pending = _reserve_undo_log(report.root)
     pairs: list[list[str]] = []
@@ -127,35 +197,61 @@ def apply_plan(report: Report) -> Path:
 
 
 def find_latest_undo_log(root: Path) -> Path | None:
-    logs = sorted(root.glob(UNDO_PREFIX + "*.json"))
-    return logs[-1] if logs else None
+    for log in sorted(root.glob(UNDO_PREFIX + "*.json"), reverse=True):
+        try:
+            data = _read_log(log)
+        except ValueError:
+            continue
+        if any(_original_path(log, data, dest).is_file() for _, dest in data["moves"]):
+            return log
+    return None
+
+
+def undo_latest(root: Path) -> tuple[Path, int] | None:
+    with _directory_lock(root) as cursor:
+        log = find_latest_undo_log(root)
+        if log is None:
+            return None
+        return log, _undo(log.absolute(), cursor)
 
 
 def undo(log_path: Path) -> int:
-    """按日志逆序还原。原名被占用时保留两者(恢复文件加序号)。"""
-    log_path = Path(log_path).absolute()
-    data = json.loads(log_path.read_text(encoding="utf-8"))
-    if data.get("version") != UNDO_LOG_VERSION:
-        raise ValueError(f"不支持的日志版本:{data.get('version')}")
-    # 旧版从相对目录整理时,路径包含当时传入的目录前缀。
-    def original_path(value: str) -> Path:
-        path = Path(value)
-        if path.is_absolute():
-            return path
-        return log_path.parent / path.relative_to(data["root"])
+    log = Path(log_path).absolute()
+    with _directory_lock(log.parent) as cursor:
+        return _undo(log, cursor)
 
-    done = 0
-    for src_s, dest_s in reversed(data.get("moves", [])):
-        src, dest = original_path(src_s), original_path(dest_s)
-        if not dest.exists():
-            continue
-        src.parent.mkdir(parents=True, exist_ok=True)
-        target = _unique_dest(src)
-        try:
-            dest.rename(target)
-        except OSError:
-            shutil.move(str(dest), str(target))
-        done += 1
+
+def _undo(log: Path, cursor: Path) -> int:
+    data = _read_log(log)
+    moves = data["moves"]
+    left, done = len(moves), 0
+    try:
+        while left:
+            src_value, dest_value = moves[left - 1]
+            src = _original_path(log, data, src_value)
+            dest = _original_path(log, data, dest_value)
+            try:
+                info = dest.lstat()
+            except FileNotFoundError:
+                left -= 1
+                continue
+            if stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+                src.parent.mkdir(parents=True, exist_ok=True)
+                target = _unique_dest(src)
+                # Store a small cursor before moving. A restart can decide
+                # whether this move finished before another batch reuses dest.
+                _write_json(cursor, {"log": log.name, "left": left, "file": [
+                    info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]})
+                shutil.move(str(dest), str(target))
+                done += 1
+            left -= 1
+    finally:
+        if left < len(moves):
+            data["moves"] = moves[:left]
+            _write_json(log, data)
+        # If a move raised after changing the filesystem, leave the intent for
+        # the next locked operation to reconcile. Earlier moves are checkpointed.
+    cursor.unlink(missing_ok=True)
     return done
 
 
